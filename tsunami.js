@@ -379,17 +379,17 @@ function createCrackSystem() {
 
   // Solid black fissure body
   const crackMaterial = new THREE.MeshStandardMaterial({
-    color: 000000 ,
+    color: 0x000000 ,
     roughness: 1,
     metalness: 0,
-    emissive: 000000 ,
+    emissive: 0x000000 ,
     emissiveIntensity: 0
   });
 
   // Red magma / energy glow inside the crack
   const glowMaterial = new THREE.MeshStandardMaterial({
-    color: 000000 ,
-    emissive: 000000 ,
+    color: 0x000000 ,
+    emissive: 0x000000 ,
     emissiveIntensity: 1.8,
     roughness: 0.35,
     metalness: 0.15,
@@ -399,8 +399,8 @@ function createCrackSystem() {
 
   // Soft red light halo (slightly wider, dimmer)
   const haloMaterial = new THREE.MeshStandardMaterial({
-    color: 000000 ,
-    emissive: 000000 ,
+    color: 0x000000 ,
+    emissive: 0x000000 ,
     emissiveIntensity: 0.9,
     roughness: 0.6,
     metalness: 0,
@@ -513,7 +513,7 @@ function createFaultVisual() {
   const mesh = fault.getObject3D('mesh');
   if (!mesh) return;
 
-  mesh.material.color.set('#ff0000ff');
+  mesh.material.color.set('#ff0000');
   mesh.material.roughness = 1;
   mesh.material.metalness = 0.5;
 }
@@ -547,10 +547,11 @@ function createTsunamiWave() {
     side: THREE.DoubleSide
   });
 
-  // High-res base so organic deformation reads clearly
-  const widthSegments = 72;
-  const heightSegments = 56;
-  const depthSegments = 4;
+  // Optimized resolution — enough detail for organic deformation
+  // without tanking performance (was 72×56×4 = ~16K verts)
+  const widthSegments = 36;
+  const heightSegments = 28;
+  const depthSegments = 2;
   const width = 68;
   const height = 24;
   const thickness = 25;
@@ -611,13 +612,13 @@ function createTsunamiWave() {
   geometry.computeVertexNormals();
 
   const wave = new THREE.Mesh(geometry, waveMaterial);
-  wave.position.set(0, -0.5, -58);
+wave.position.set(0, -0.5, -1000);
   wave.scale.set(0.5, 0.55, 0.45);
   wave.visible = false;
   group.add(wave);
 
-// Foam crest — sits on the thick lip (pushed further forward for thickness 47)
-  const foamGeo = new THREE.BoxGeometry(width * 0.95, 2.2, 4.5, 48, 6, 4);
+  // Foam crest — sits on the thick lip (pushed further forward for thickness 47)
+  const foamGeo = new THREE.BoxGeometry(width * 0.95, 2.2, 4.5, 24, 4, 2);
   const foamPos = foamGeo.attributes.position;
   for (let i = 0; i < foamPos.count; i++) {
     const fx = foamPos.getX(i);
@@ -637,7 +638,7 @@ function createTsunamiWave() {
   wave.add(foam);
 
   // Secondary foam band under the main lip
-  const foam2Geo = new THREE.BoxGeometry(width * 0.72, 1.1, 2.8, 28, 3, 3);
+  const foam2Geo = new THREE.BoxGeometry(width * 0.72, 1.1, 2.8, 14, 2, 2);
   const foam2Pos = foam2Geo.attributes.position;
   for (let i = 0; i < foam2Pos.count; i++) {
     const fx = foam2Pos.getX(i);
@@ -653,7 +654,7 @@ function createTsunamiWave() {
 
   // Spray particles — concentrated on the thicker crest
   const particleGeometry = new THREE.BufferGeometry();
-  const particleCount = 360;
+  const particleCount = 180;
   const particlePositions = new Float32Array(particleCount * 3);
 
   for (let i = 0; i < particleCount; i++) {
@@ -677,7 +678,7 @@ function createTsunamiWave() {
 
   // Secondary spray cluster
   const spray2Geo = new THREE.BufferGeometry();
-  const n2 = 120;
+  const n2 = 60;
   const p2 = new Float32Array(n2 * 3);
   for (let i = 0; i < n2; i++) {
     p2[i * 3]     = (Math.random() - 0.5) * 40;
@@ -698,241 +699,6 @@ function createTsunamiWave() {
   container.userData = container.userData || {};
   container.userData.wave = wave;
   container.userData.waveGroup = group;
-}
-
-// ============================================================
-// PROCEDURAL AUDIO (Web Audio API)
-// Earthquake rumble, ocean waves, underwater ambience
-// (no alarm / siren)
-// ============================================================
-
-function createAudioSystem() {
-  if (!window.AudioContext && !window.webkitAudioContext) return null;
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  const ctx = new AudioCtx();
-
-  const master = ctx.createGain();
-  master.gain.value = 0.58;
-  master.connect(ctx.destination);
-
-  // Helper: fill buffer with white noise
-  function makeNoiseBuffer(seconds) {
-    const len = Math.floor(ctx.sampleRate * seconds);
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
-    return buf;
-  }
-
-  // ----------------------------------------------------------
-  // EARTHQUAKE / TECTONIC LAYER (scary phase 1)
-  // Deep filtered noise + sub oscillator + crack impulses
-  // ----------------------------------------------------------
-
-  // Primary rumble (very low lowpass noise)
-  const rumbleSource = ctx.createBufferSource();
-  rumbleSource.buffer = makeNoiseBuffer(3);
-  rumbleSource.loop = true;
-
-  const rumbleLPF = ctx.createBiquadFilter();
-  rumbleLPF.type = 'lowpass';
-  rumbleLPF.frequency.value = 55;
-  rumbleLPF.Q.value = 3.5;
-
-  const rumbleGain = ctx.createGain();
-  rumbleGain.gain.value = 0;
-
-  rumbleSource.connect(rumbleLPF);
-  rumbleLPF.connect(rumbleGain);
-  rumbleGain.connect(master);
-  rumbleSource.start(0);
-
-  // Secondary mid-rumble (rock grinding feel)
-  const grindSource = ctx.createBufferSource();
-  grindSource.buffer = makeNoiseBuffer(2.5);
-  grindSource.loop = true;
-
-  const grindLPF = ctx.createBiquadFilter();
-  grindLPF.type = 'lowpass';
-  grindLPF.frequency.value = 180;
-  grindLPF.Q.value = 1.8;
-
-  const grindHPF = ctx.createBiquadFilter();
-  grindHPF.type = 'highpass';
-  grindHPF.frequency.value = 40;
-
-  const grindGain = ctx.createGain();
-  grindGain.gain.value = 0;
-
-  grindSource.connect(grindHPF);
-  grindHPF.connect(grindLPF);
-  grindLPF.connect(grindGain);
-  grindGain.connect(master);
-  grindSource.start(0);
-
-  // Deep sub-bass oscillator (felt as much as heard)
-  const subOsc = ctx.createOscillator();
-  subOsc.type = 'sine';
-  subOsc.frequency.value = 28;
-  const subGain = ctx.createGain();
-  subGain.gain.value = 0;
-  subOsc.connect(subGain);
-  subGain.connect(master);
-  subOsc.start(0);
-
-  // Secondary sub for beating / unease
-  const subOsc2 = ctx.createOscillator();
-  subOsc2.type = 'sine';
-  subOsc2.frequency.value = 36;
-  const subGain2 = ctx.createGain();
-  subGain2.gain.value = 0;
-  subOsc2.connect(subGain2);
-  subGain2.connect(master);
-  subOsc2.start(0);
-
-  // Crack / impact impulse generator (triggered during quake)
-  const crackGain = ctx.createGain();
-  crackGain.gain.value = 0.7;
-  crackGain.connect(master);
-
-  function triggerCrack() {
-    if (ctx.state !== 'running') return;
-    const now = ctx.currentTime;
-    // Short noise burst
-    const burst = ctx.createBufferSource();
-    burst.buffer = makeNoiseBuffer(0.15);
-    const filt = ctx.createBiquadFilter();
-    filt.type = 'bandpass';
-    filt.frequency.value = 180 + Math.random() * 420;
-    filt.Q.value = 2.5 + Math.random() * 3;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.55 + Math.random() * 0.4, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + 0.12 + Math.random() * 0.18);
-    burst.connect(filt);
-    filt.connect(g);
-    g.connect(crackGain);
-    burst.start(now);
-    burst.stop(now + 0.35);
-  }
-
-  // ----------------------------------------------------------
-  // OCEAN SURFACE WAVES
-  // ----------------------------------------------------------
-  const oceanSource = ctx.createBufferSource();
-  oceanSource.buffer = makeNoiseBuffer(4);
-  oceanSource.loop = true;
-
-  const oceanHPF = ctx.createBiquadFilter();
-  oceanHPF.type = 'highpass';
-  oceanHPF.frequency.value = 120;
-
-  const oceanBPF = ctx.createBiquadFilter();
-  oceanBPF.type = 'bandpass';
-  oceanBPF.frequency.value = 520;
-  oceanBPF.Q.value = 0.55;
-
-  // Slow amplitude LFO so waves feel surging
-  const oceanLFO = ctx.createOscillator();
-  oceanLFO.type = 'sine';
-  oceanLFO.frequency.value = 0.18;
-  const oceanLFOGain = ctx.createGain();
-  oceanLFOGain.gain.value = 0.22;
-  const oceanGain = ctx.createGain();
-  oceanGain.gain.value = 0;
-  oceanLFO.connect(oceanLFOGain);
-  oceanLFOGain.connect(oceanGain.gain);
-
-  oceanSource.connect(oceanHPF);
-  oceanHPF.connect(oceanBPF);
-  oceanBPF.connect(oceanGain);
-  oceanGain.connect(master);
-  oceanSource.start(0);
-  oceanLFO.start(0);
-
-  // ----------------------------------------------------------
-  // UNDERWATER AMBIENCE (muffled, pressure feel)
-  // ----------------------------------------------------------
-  const underSource = ctx.createBufferSource();
-  underSource.buffer = makeNoiseBuffer(3.5);
-  underSource.loop = true;
-
-  const underLPF = ctx.createBiquadFilter();
-  underLPF.type = 'lowpass';
-  underLPF.frequency.value = 380;
-  underLPF.Q.value = 1.2;
-
-  const underHPF = ctx.createBiquadFilter();
-  underHPF.type = 'highpass';
-  underHPF.frequency.value = 60;
-
-  const underGain = ctx.createGain();
-  underGain.gain.value = 0;
-
-  underSource.connect(underHPF);
-  underHPF.connect(underLPF);
-  underLPF.connect(underGain);
-  underGain.connect(master);
-  underSource.start(0);
-
-  // Soft underwater pulse (distant pressure / boom)
-  const underPulse = ctx.createOscillator();
-  underPulse.type = 'sine';
-  underPulse.frequency.value = 55;
-  const underPulseGain = ctx.createGain();
-  underPulseGain.gain.value = 0;
-  underPulse.connect(underPulseGain);
-  underPulseGain.connect(master);
-  underPulse.start(0);
-
-  // ----------------------------------------------------------
-  // WIND (storm phases)
-  // ----------------------------------------------------------
-  const windSource = ctx.createBufferSource();
-  windSource.buffer = makeNoiseBuffer(3);
-  windSource.loop = true;
-
-  const windHPF = ctx.createBiquadFilter();
-  windHPF.type = 'highpass';
-  windHPF.frequency.value = 1800;
-
-  const windBPF = ctx.createBiquadFilter();
-  windBPF.type = 'bandpass';
-  windBPF.frequency.value = 3200;
-  windBPF.Q.value = 0.45;
-
-  const windGain = ctx.createGain();
-  windGain.gain.value = 0;
-
-  windSource.connect(windHPF);
-  windHPF.connect(windBPF);
-  windBPF.connect(windGain);
-  windGain.connect(master);
-  windSource.start(0);
-
-  // Legacy alias so older call sites that used waterGain still work
-  // (maps to ocean surface waves)
-  const waterGain = oceanGain;
-  const waterBPF = oceanBPF;
-
-  return {
-    ctx,
-    master,
-    rumbleGain,
-    grindGain,
-    subGain,
-    subGain2,
-    waterGain,       // ocean surface
-    waterBPF,
-    oceanGain,
-    oceanBPF,
-    underGain,
-    underPulseGain,
-    windGain,
-    windBPF,
-    crackGain,
-    triggerCrack,
-    resume: () => { if (ctx.state === 'suspended') ctx.resume(); }
-  };
 }
 
 // ============================================================
@@ -1065,7 +831,6 @@ AFRAME.registerComponent('tsunami-loop', {
     this.geometry = null;
     this.basePositions = null;
 
-    this.audio = null;
     this.alarmActive = false;
     this.rainActive = false;
     this.debrisActive = false;
@@ -1105,15 +870,6 @@ AFRAME.registerComponent('tsunami-loop', {
       if (this.fault) {
         this.faultMesh = this.fault.getObject3D('mesh');
       }
-
-      const initAudio = () => {
-        this.audio = createAudioSystem();
-        if (this.audio) this.audio.resume();
-        document.removeEventListener('click', initAudio);
-        document.removeEventListener('touchstart', initAudio);
-      };
-      document.addEventListener('click', initAudio);
-      document.addEventListener('touchstart', initAudio);
     };
 
     if (this.el.sceneEl && this.el.sceneEl.hasLoaded) {
@@ -1154,7 +910,6 @@ AFRAME.registerComponent('tsunami-loop', {
     const countdown = Math.ceil(nextPhaseTime);
 
     let amp, freqMul, speedMul, oceanColor, shakeAmt, statusMsg, panelColor, skyColor;
-    let fogDensity = 0.008;
     let sunIntensity = 1.35;
     let ambientIntensity = 0.65;
     let hemiIntensity = 0.45;
@@ -1179,7 +934,7 @@ AFRAME.registerComponent('tsunami-loop', {
       oceanColor = '#0a4d8f';
       skyColor = '#78c5e8';
       panelColor = '#0b2638';
-      shakeAmt = progress * progress * 0.14;
+      shakeAmt = progress * progress * 0.06;
       recessionOffset = 0;
       statusMsg = `${this.STATUS.phase1}\nNext phase in  ${countdown}s`;
 
@@ -1207,27 +962,11 @@ AFRAME.registerComponent('tsunami-loop', {
 
       // Hide wave during tectonic phase
       if (this.waveContainer && this.waveContainer.userData && this.waveContainer.userData.wave) {
-        this.waveContainer.userData.wave.visible = false;
+  const wave = this.waveContainer.userData.wave;
+  wave.visible = false;
+  wave.position.set(0, -0.5, -1000); // Lock far away
       }
 
-      if (this.audio) {
-        const t = this.audio.ctx.currentTime;
-        // Build scary earthquake intensity — peaks hard near end of phase 1
-        const quake = Math.pow(progress, 1.35);
-        this.audio.rumbleGain.gain.setTargetAtTime(quake * 0.72, t, 0.25);
-        this.audio.grindGain.gain.setTargetAtTime(quake * 0.38, t, 0.3);
-        this.audio.subGain.gain.setTargetAtTime(quake * 0.55, t, 0.25);
-        this.audio.subGain2.gain.setTargetAtTime(quake * 0.28, t, 0.3);
-        // Occasional rock-crack impacts
-        if (progress > 0.15 && Math.random() < 0.035 + progress * 0.04) {
-          this.audio.triggerCrack();
-        }
-        // Keep ocean / underwater silent during pure tectonic phase
-        this.audio.oceanGain.gain.setTargetAtTime(0, t, 0.5);
-        this.audio.underGain.gain.setTargetAtTime(0, t, 0.5);
-        this.audio.underPulseGain.gain.setTargetAtTime(0, t, 0.5);
-        this.audio.windGain.gain.setTargetAtTime(0, t, 0.5);
-      }
     }
 
     // ============================================================
@@ -1240,11 +979,10 @@ AFRAME.registerComponent('tsunami-loop', {
       amp = 0.25 + progress * 0.7;
       freqMul = 1.5 + progress * 0.5;
       speedMul = 0.9 + progress * 0.7;
-      shakeAmt = 0.04 + progress * 0.06;
+      shakeAmt = 0.025 + progress * 0.012;
       skyColor = '#78c5e8';
       oceanColor = '#2fb8e8';
       panelColor = '#0c2a3a';
-      fogDensity = 0.008 + progress * 0.008;
       sunIntensity = 1.35 - progress * 0.35;
       ambientIntensity = 0.65 - progress * 0.1;
 
@@ -1271,43 +1009,13 @@ AFRAME.registerComponent('tsunami-loop', {
         this.faultLight.setAttribute('light', 'intensity', 0);
       }
 
-      // Gradual grow + slow travel across the full 10s
-      if (this.waveContainer && this.waveContainer.userData && this.waveContainer.userData.wave) {
-        const wave = this.waveContainer.userData.wave;
-        wave.visible = true;
-
-        const t = THREE.MathUtils.smoothstep(progress, 0, 1);
-        // Start modest, end large by end of phase 2
-        const sx = 0.5 + t * 1.9;
-        const sy = 0.55 + t * 2.3;
-        const sz = 0.45 + t * 1.6;
-        wave.scale.set(sx, sy, sz);
-
-        // Slow advance: z=-58 → ~-30 over 10s
-        wave.position.z = -58 + t * 28;
-        wave.position.x = Math.sin(this.time * 0.28) * 1.5
-                        + Math.sin(this.time * 0.11) * 0.6;
-        wave.position.y = -0.5 + t * 0.25 + Math.sin(this.time * 0.5) * 0.1;
-        wave.rotation.z = Math.sin(this.time * 0.3) * 0.05;
-        wave.rotation.y = Math.sin(this.time * 0.18) * 0.03;
-      }
-
-      if (this.audio) {
-        const t = this.audio.ctx.currentTime;
-        // Residual aftershock rumble fades while ocean takes over
-        this.audio.rumbleGain.gain.setTargetAtTime(0.18 * (1 - progress * 0.6), t, 0.4);
-        this.audio.grindGain.gain.setTargetAtTime(0.08 * (1 - progress), t, 0.4);
-        this.audio.subGain.gain.setTargetAtTime(0.12 * (1 - progress * 0.5), t, 0.4);
-        this.audio.subGain2.gain.setTargetAtTime(0.05, t, 0.4);
-        // Ocean surface waves swell in
-        const oceanVol = Math.min(0.08 + progress * 0.32, 0.38);
-        this.audio.oceanGain.gain.setTargetAtTime(oceanVol, t, 0.35);
-        this.audio.oceanBPF.frequency.setTargetAtTime(380 + progress * 480, t, 0.3);
-        // Underwater layer starts emerging as wave energy builds
-        this.audio.underGain.gain.setTargetAtTime(progress * 0.22, t, 0.4);
-        this.audio.underPulseGain.gain.setTargetAtTime(progress * 0.08, t, 0.4);
-        this.audio.windGain.gain.setTargetAtTime(progress * 0.1, t, 0.5);
-      }
+     // Keep wave hidden and parked far away on the horizon during Phase 2
+if (this.waveContainer && this.waveContainer.userData && this.waveContainer.userData.wave) {
+  const wave = this.waveContainer.userData.wave;
+  wave.visible = false;
+  wave.position.set(0, -0.5, -1000); // Lock far away
+  wave.rotation.set(0, 0, 0);
+}
     }
 
     // ============================================================
@@ -1320,12 +1028,11 @@ AFRAME.registerComponent('tsunami-loop', {
       amp = 0.9 + progress * 0.55;
       freqMul = 2.0 + progress * 0.5;
       speedMul = 1.5 + progress * 0.6;
-      shakeAmt = 0.08 + progress * progress * 0.16;
+      shakeAmt = 0.05 + progress * progress * 0.06;
 
       skyColor = '#2a4a5a';
       oceanColor = '#074060';
       panelColor = '#081820';
-      fogDensity = 0.02 + progress * 0.06;
       sunIntensity = 0.5 - progress * 0.15;
       ambientIntensity = 0.35 - progress * 0.08;
       hemiIntensity = 0.25;
@@ -1359,41 +1066,50 @@ AFRAME.registerComponent('tsunami-loop', {
         this.faultLight.setAttribute('light', 'intensity', 0);
       }
 
-      // Continue gradual growth to peak + slow crawl toward platform
       if (this.waveContainer && this.waveContainer.userData && this.waveContainer.userData.wave) {
-        const wave = this.waveContainer.userData.wave;
-        wave.visible = true;
+  const wave = this.waveContainer.userData.wave;
+  wave.visible = true;
 
-        const t = THREE.MathUtils.smoothstep(progress, 0, 1);
-        // Pick up from end of phase 2 (~2.4/2.85/2.05) and push to full peak
-        const sx = 2.4 + t * 1.0;
-        const sy = 2.85 + t * 1.35;
-        const sz = 2.05 + t * 0.75;
-        wave.scale.set(sx, sy, sz);
+  // Ease-in (no ease-out): the wave stays visibly small and far for most
+  // of phase 3, then rushes in hard at the very end. This is what makes
+  // it read as "traveling toward you" rather than "already filling the
+  // screen the whole time." Power 2.8 keeps the wave under ~30° of your
+  // field of view until ~80% through the phase.
+  const t = Math.pow(progress, 2.8);
 
-        // Slow crawl: z≈-30 → ≈-6 over 10s
-        wave.position.z = -30 + t * 24;
-        wave.position.x = Math.sin(this.time * 0.35) * 1.9
-                        + Math.sin(this.time * 0.14) * 0.9;
-        wave.position.y = -0.25 + t * 0.35 + Math.sin(this.time * 0.55) * 0.15;
-        wave.rotation.z = Math.sin(this.time * 0.32) * 0.07;
-        wave.rotation.y = Math.sin(this.time * 0.2) * 0.04;
-      }
+  // The wave's own bounding box (68 wide) was making it enormous even
+  // at a "safe" distance — a scale of 2.8x made it ~190 units wide,
+  // which is wider than your camera's field of view from 50+ units
+  // away. That's why it still felt like it was on top of you even
+  // after the literal z-overlap was fixed: it doesn't need to touch
+  // the camera to fill the whole screen. Growth is capped lower here
+  // (max ~2.3x / ~2.35x / ~1.8x instead of 2.8/2.9/2.3) so the final
+  // size is dramatic without being physically absurd relative to the
+  // viewing distance.
+  const grow = t;
+  const sx = 0.2 + grow * 2.1;   // 0.2 → 2.3
+  const sy = 0.15 + grow * 2.2;  // 0.15 → 2.35
+  const sz = 0.2 + grow * 1.6;   // 0.2 → 1.8
+  wave.scale.set(sx, sy, sz);
 
-      if (this.audio) {
-        const t = this.audio.ctx.currentTime;
-        // Full ocean roar + deep underwater pressure
-        this.audio.oceanGain.gain.setTargetAtTime(0.42 + progress * 0.12, t, 0.3);
-        this.audio.oceanBPF.frequency.setTargetAtTime(620 + progress * 520, t, 0.25);
-        this.audio.underGain.gain.setTargetAtTime(0.32 + progress * 0.18, t, 0.3);
-        this.audio.underPulseGain.gain.setTargetAtTime(0.12 + progress * 0.1, t, 0.3);
-        // Low residual tectonic energy under the water chaos
-        this.audio.rumbleGain.gain.setTargetAtTime(0.22 + progress * 0.12, t, 0.3);
-        this.audio.grindGain.gain.setTargetAtTime(0.1, t, 0.4);
-        this.audio.subGain.gain.setTargetAtTime(0.2 + progress * 0.08, t, 0.3);
-        this.audio.subGain2.gain.setTargetAtTime(0.1, t, 0.3);
-        this.audio.windGain.gain.setTargetAtTime(0.22 + progress * 0.14, t, 0.35);
-      }
+  // The wave mesh's crest/curl deformation pushes its front face
+  // ~19.7 units forward of its pivot in local space (measured, not
+  // guessed — see probe script). At sz maxing at 1.8 that's ~35.4
+  // units of forward push. endZ is set so the front face bottoms out
+  // around z = -60, staying a comfortable ~65 units from the camera
+  // (camera-rig sits at z = 5) — close enough to loom dramatically at
+  // the climax, far enough that it never clips into or through you.
+  const startZ = -300;
+  const endZ = -95;
+  wave.position.z = THREE.MathUtils.lerp(startZ, endZ, t);
+
+  // Organic wave drift & sway
+  wave.position.x = Math.sin(this.time * 0.35) * 1.9 + Math.sin(this.time * 0.14) * 0.9;
+  wave.position.y = -0.25 + t * 0.35 + Math.sin(this.time * 0.55) * 0.15;
+  wave.rotation.z = Math.sin(this.time * 0.32) * 0.07;
+  wave.rotation.y = Math.sin(this.time * 0.2) * 0.04;
+}
+
     }
 
     // ============================================================
@@ -1409,7 +1125,6 @@ AFRAME.registerComponent('tsunami-loop', {
       skyColor = '#78c5e8';
       panelColor = '#0b2638';
       shakeAmt = 0;
-      fogDensity = 0.028 - resetProgress * 0.02;
       sunIntensity = 0.4 + resetProgress * 0.95;
       ambientIntensity = 0.3 + resetProgress * 0.35;
       hemiIntensity = 0.22 + resetProgress * 0.23;
@@ -1432,29 +1147,19 @@ AFRAME.registerComponent('tsunami-loop', {
       }
       if (this.waveContainer && this.waveContainer.userData && this.waveContainer.userData.wave) {
         const wave = this.waveContainer.userData.wave;
-        // Fade out by shrinking / retreating briefly then hide
+        // Fade out by shrinking / retreating briefly then hide.
+        // Numbers match the new phase-3 climax scale/position (2.3 / 2.35 / 1.8 at z = -95)
+        // instead of the old, larger 2.8 / 2.9 / 2.3 at z = -80.
         if (resetProgress < 0.4) {
           wave.visible = true;
           const fade = 1 - resetProgress / 0.4;
-          wave.scale.set(3.4 * fade, 4.2 * fade, 2.8 * fade);
-          wave.position.z = -6 - resetProgress * 20;
+          wave.scale.set(2.3 * fade, 2.35 * fade, 1.8 * fade);
+          wave.position.z = -95 - resetProgress * 20;
         } else {
           wave.visible = false;
         }
       }
 
-      if (this.audio) {
-        const t = this.audio.ctx.currentTime;
-        // Fade everything cleanly for the next cycle
-        this.audio.rumbleGain.gain.setTargetAtTime(0, t, 0.5);
-        this.audio.grindGain.gain.setTargetAtTime(0, t, 0.5);
-        this.audio.subGain.gain.setTargetAtTime(0, t, 0.5);
-        this.audio.subGain2.gain.setTargetAtTime(0, t, 0.5);
-        this.audio.oceanGain.gain.setTargetAtTime(0, t, 0.45);
-        this.audio.underGain.gain.setTargetAtTime(0, t, 0.45);
-        this.audio.underPulseGain.gain.setTargetAtTime(0, t, 0.45);
-        this.audio.windGain.gain.setTargetAtTime(0, t, 0.5);
-      }
     }
 
     // ============================================================
@@ -1480,13 +1185,6 @@ AFRAME.registerComponent('tsunami-loop', {
     if (this.dataReadout1) this.dataReadout1.setAttribute('value', dataLine1);
     if (this.dataReadout2) this.dataReadout2.setAttribute('value', dataLine2);
 
-    // Fog
-    if (this.el.sceneEl.object3D && this.el.sceneEl.object3D.fog) {
-      this.el.sceneEl.object3D.fog.density = THREE.MathUtils.lerp(
-        this.el.sceneEl.object3D.fog.density, fogDensity, 0.04
-      );
-    }
-
     // Lighting
     if (this.sunLight) this.sunLight.setAttribute('light', 'intensity', sunIntensity);
     if (this.ambientLight) this.ambientLight.setAttribute('light', 'intensity', ambientIntensity);
@@ -1509,31 +1207,47 @@ AFRAME.registerComponent('tsunami-loop', {
     }
 
     // Warning bar
+    // (opacity is cached on `this` instead of re-read via getAttribute()
+    // every frame — getAttribute on an A-Frame component is a lot more
+    // expensive than reading a plain JS number, and we already know
+    // what we last set it to.)
     if (this.warningBar) {
-      const currentOp = parseFloat(this.warningBar.getAttribute('material').opacity) || 0;
+      if (this.lastWarningBarOpacity === undefined) {
+        this.lastWarningBarOpacity = parseFloat(this.warningBar.getAttribute('material').opacity) || 0;
+      }
+      const currentOp = this.lastWarningBarOpacity;
       const newOp = currentOp + (warningBarOpacity - currentOp) * 0.08;
       if (Math.abs(newOp - currentOp) > 0.005) {
         this.warningBar.setAttribute('material', 'opacity', newOp);
+        this.lastWarningBarOpacity = newOp;
       }
     }
 
-    // Clouds
-    if (this.cloudLayer) {
+    // Clouds (only touch the DOM/component when the value actually flips)
+    if (this.cloudLayer && this.lastShowClouds !== showClouds) {
       this.cloudLayer.setAttribute('visible', showClouds);
+      this.lastShowClouds = showClouds;
     }
 
-    // Foam
+    // Foam (same getAttribute-avoidance as the warning bar above)
     if (this.foamLayer) {
-      const currentFop = parseFloat(this.foamLayer.getAttribute('opacity')) || 0;
+      if (this.lastFoamOpacity === undefined) {
+        this.lastFoamOpacity = parseFloat(this.foamLayer.getAttribute('opacity')) || 0;
+      }
+      const currentFop = this.lastFoamOpacity;
       const newFop = currentFop + (foamOpacity - currentFop) * 0.05;
       if (Math.abs(newFop - currentFop) > 0.001) {
         this.foamLayer.setAttribute('opacity', newFop);
+        this.lastFoamOpacity = newFop;
       }
     }
 
     // Rain
     if (this.rainContainer) {
-      this.rainContainer.setAttribute('visible', showRain);
+      if (this.lastShowRain !== showRain) {
+        this.rainContainer.setAttribute('visible', showRain);
+        this.lastShowRain = showRain;
+      }
       if (showRain && this.rainContainer.userData && this.rainContainer.userData.rain) {
         const rain = this.rainContainer.userData.rain;
         const vels = this.rainContainer.userData.rainVelocities;
@@ -1575,7 +1289,10 @@ AFRAME.registerComponent('tsunami-loop', {
       const cam = this.cameraRig.object3D;
 
       if (shakeAmt > 0.001) {
-        // Violent multi-frequency seismic shake
+        // Multi-frequency seismic shake — position shake kept close to
+        // the original feel, but rotation shake is the thing that
+        // actually makes people queasy (it was hitting ~30°+ of roll
+        // at peak shakeAmt), so those multipliers are cut way down.
         cam.position.x = Math.sin(this.time * 18) * shakeAmt
                        + Math.sin(this.time * 41) * shakeAmt * 0.45;
         cam.position.y = this.baseCamY
@@ -1583,12 +1300,12 @@ AFRAME.registerComponent('tsunami-loop', {
                        + Math.sin(this.time * 53) * shakeAmt * 0.4;
         cam.position.z = Math.cos(this.time * 22) * shakeAmt * 0.7
                        + Math.cos(this.time * 47) * shakeAmt * 0.25;
-        cam.rotation.z = Math.sin(this.time * 9) * shakeAmt * 2.4
-                       + Math.sin(this.time * 21) * shakeAmt * 0.8;
-        cam.rotation.x = Math.cos(this.time * 11) * shakeAmt * 1.8
-                       + Math.cos(this.time * 29) * shakeAmt * 0.6;
-        cam.rotation.y = Math.sin(this.time * 6) * shakeAmt * 1.2
-                       + Math.sin(this.time * 17) * shakeAmt * 0.5;
+        cam.rotation.z = Math.sin(this.time * 9) * shakeAmt * 0.6
+                       + Math.sin(this.time * 21) * shakeAmt * 0.2;
+        cam.rotation.x = Math.cos(this.time * 11) * shakeAmt * 0.45
+                       + Math.cos(this.time * 29) * shakeAmt * 0.15;
+        cam.rotation.y = Math.sin(this.time * 6) * shakeAmt * 0.3
+                       + Math.sin(this.time * 17) * shakeAmt * 0.12;
       } else {
         cam.position.x = Math.sin(this.time * 0.15) * 0.012;
         cam.position.y = this.baseCamY + Math.sin(this.time * 0.22) * 0.008;
@@ -1649,7 +1366,65 @@ AFRAME.registerComponent('tsunami-loop', {
     }
   }
 });
+// Insert directly above INITIALIZATION
+function createClouds() {
+  const scene = document.querySelector('a-scene');
+  if (!scene) return;
 
+  const cloudGroup = new THREE.Group();
+  cloudGroup.name = 'sky-clouds';
+
+  const cloudMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 1.0,
+    metalness: 0.0,
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+    flatShading: true
+  });
+
+  const cloudClusters = [
+    { x: -45, y: 28, z: -40, scale: 1.3 },
+    { x: -20, y: 34, z: -55, scale: 1.6 },
+    { x: 8,   y: 30, z: -48, scale: 1.4 },
+    { x: 35,  y: 27, z: -38, scale: 1.2 },
+    { x: -50, y: 25, z: -15, scale: 1.1 },
+    { x: 48,  y: 29, z: -20, scale: 1.5 },
+    { x: 0,   y: 36, z: -65, scale: 1.8 },
+    { x: -30, y: 30, z:  25, scale: 1.3 },
+    { x: 28,  y: 32, z:  30, scale: 1.4 }
+  ];
+
+  cloudClusters.forEach(config => {
+    const cloud = new THREE.Group();
+    const puffCount = 6 + Math.floor(Math.random() * 5);
+
+    for (let i = 0; i < puffCount; i++) {
+      const radius = (3.5 + Math.random() * 3.5) * config.scale;
+      const geo = new THREE.DodecahedronGeometry(radius, 1);
+      const puff = new THREE.Mesh(geo, cloudMaterial);
+
+      puff.position.set(
+        (Math.random() - 0.5) * 10 * config.scale,
+        (Math.random() - 0.5) * 3.5 * config.scale,
+        (Math.random() - 0.5) * 8 * config.scale
+      );
+
+      puff.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      cloud.add(puff);
+    }
+
+    cloud.position.set(config.x, config.y, config.z);
+    cloudGroup.add(cloud);
+  });
+
+  scene.object3D.add(cloudGroup);
+}
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
 // ============================================================
 // INITIALIZATION
 // ============================================================
@@ -1658,14 +1433,29 @@ window.addEventListener('DOMContentLoaded', () => {
   const scene = document.querySelector('a-scene');
   if (!scene) return;
 
+  // Each builder runs independently now: if one throws (like the bad
+  // #ff0000ff color did), the rest of the scene still gets built
+  // instead of silently vanishing. Errors are still logged to console
+  // so real bugs don't go unnoticed.
+  const initSteps = [
+    applyTextures,
+    createCrackSystem,
+    createFaultVisual,
+    createTsunamiWave,
+    createOceanDebris,
+    createRainSystem,
+    createMountainTerrain,
+    createClouds
+  ];
+
   const initialize = () => {
-    applyTextures();
-    createCrackSystem();
-    createFaultVisual();
-    createTsunamiWave();
-    createOceanDebris();
-    createRainSystem();
-    createMountainTerrain();
+    initSteps.forEach((step) => {
+      try {
+        step();
+      } catch (e) {
+        console.error(`[tsunami exhibit] ${step.name} failed to initialize:`, e);
+      }
+    });
   };
 
   if (scene.hasLoaded) {
