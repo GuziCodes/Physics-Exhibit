@@ -1649,7 +1649,61 @@ AFRAME.registerComponent('tsunami-loop', {
     }
   }
 });
+// Insert directly above INITIALIZATION
+function createClouds() {
+  const scene = document.querySelector('a-scene');
+  if (!scene) return;
 
+  const cloudGroup = new THREE.Group();
+  cloudGroup.name = 'sky-clouds';
+
+  const cloudMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 1.0,
+    metalness: 0.0,
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+    flatShading: true
+  });
+
+  const cloudClusters = [
+    { x: -45, y: 28, z: -40, scale: 1.3 },
+    { x: -20, y: 34, z: -55, scale: 1.6 },
+    { x: 8,   y: 30, z: -48, scale: 1.4 },
+    { x: 35,  y: 27, z: -38, scale: 1.2 },
+    { x: -50, y: 25, z: -15, scale: 1.1 },
+    { x: 48,  y: 29, z: -20, scale: 1.5 },
+    { x: 0,   y: 36, z: -65, scale: 1.8 },
+    { x: -30, y: 30, z:  25, scale: 1.3 },
+    { x: 28,  y: 32, z:  30, scale: 1.4 }
+  ];
+
+  cloudClusters.forEach(config => {
+    const cloud = new THREE.Group();
+    const puffCount = 6 + Math.floor(Math.random() * 5);
+
+    for (let i = 0; i < puffCount; i++) {
+      const radius = (3.5 + Math.random() * 3.5) * config.scale;
+      const geo = new THREE.DodecahedronGeometry(radius, 1);
+      const puff = new THREE.Mesh(geo, cloudMaterial);
+
+      puff.position.set(
+        (Math.random() - 0.5) * 10 * config.scale,
+        (Math.random() - 0.5) * 3.5 * config.scale,
+        (Math.random() - 0.5) * 8 * config.scale
+      );
+
+      puff.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      cloud.add(puff);
+    }
+
+    cloud.position.set(config.x, config.y, config.z);
+    cloudGroup.add(cloud);
+  });
+
+  scene.object3D.add(cloudGroup);
+}
 // ============================================================
 // INITIALIZATION
 // ============================================================
@@ -1666,6 +1720,7 @@ window.addEventListener('DOMContentLoaded', () => {
     createOceanDebris();
     createRainSystem();
     createMountainTerrain();
+    createClouds();
   };
 
   if (scene.hasLoaded) {
